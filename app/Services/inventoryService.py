@@ -1,7 +1,11 @@
+import json
+import time
+
 from fastapi import HTTPException
 from ..Database.database import inventory_collection,product_collection
 from ..Models.models import Inventory
 from ..Models.models import User
+from ..Database.database import redis_client
 
 class inventoryService:
 
@@ -29,17 +33,74 @@ class inventoryService:
             raise HTTPException(status_code=401,detail="Only managers can add the inventories")
 
 
-    def getAllInventories(current_user : User):
+    async def getSingleInventory(id: str, current_user: User):
+
+        cache_key = f"inventory:{id}"
+
+        if current_user["user_role"] != "manager":
+            raise HTTPException(
+                status_code=401,
+                detail="Only managers can see the inventories"
+            )
+
+        start_time = time.perf_counter()
+
+        # 1. Check Redis
+        cached_inventory = await redis_client.get(cache_key)
+
+        if cached_inventory is not None:
+
+            end_time = time.perf_counter()
+            execution_time = (end_time - start_time) * 1000
+
+            return {
+                "source": "Redis",
+                "inventory": json.loads(cached_inventory),
+                "execution_time_ms": round(execution_time, 2)
+            }
+
+        # 2. Cache miss → MongoDB
+        inventory = inventory_collection.find_one(
+            {"inventory_id": id}
+        )
+
+        if inventory is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Inventory not found"
+            )
+
+        # Convert ObjectId
+        inventory["_id"] = str(inventory["_id"])
+
+        # 3. Store in Redis
+        await redis_client.set(
+            cache_key,
+            json.dumps(inventory),
+            ex=300
+        )
+
+        end_time = time.perf_counter()
+        execution_time = (end_time - start_time) * 1000
+
+        return {
+            "source": "MongoDB",
+            "inventory": inventory,
+            "execution_time_ms": round(execution_time, 2)
+        }
+        
+    async def getAllInventories(current_user : User):
         if current_user["user_role"] == "manager":
-            inventories=list(inventory_collection.find({}))
-            for inventory in inventories:
-                inventory["_id"]=str(inventory["_id"])
+            inventories = []
+            for inventory in inventory_collection.find({}):
+                inventory["_id"] = str(inventory["_id"])
+                inventories.append(inventory)
             return inventories
         else:
             raise HTTPException(status_code=401,detail="Only managers can see the inventories")
 
-    def updateSingleInventory(id:str,updateInventory:Inventory):
-        inventory=inventory_collection.update_one(
+    async def updateSingleInventory(id:str,updateInventory:Inventory):
+        inventory = inventory_collection.update_one(
             {"inventory_id" : id},
             {"$set" : updateInventory.model_dump()}
         )
@@ -52,9 +113,9 @@ class inventoryService:
                 "Updated Inventory":updateInventory
             }
 
-    def deleteSingleInventory(id:str,current_user:User):
+    async def deleteSingleInventory(id:str,current_user:User):
         if current_user["user_role"] == "manager":
-            result=inventory_collection.delete_one({
+            result = inventory_collection.delete_one({
                 "inventory_id":id
             })
             if result.deleted_count == 0:

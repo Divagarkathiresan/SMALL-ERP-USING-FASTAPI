@@ -1,5 +1,6 @@
 import os
 import logging
+import redis.asyncio as redis
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -14,6 +15,12 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+redis_client = redis.Redis(
+    host="localhost",
+    port=6379,
+    decode_responses=True 
+)
 
 try:
     # Create MongoDB client

@@ -15,15 +15,19 @@ class inventoryRoute:
         return inventoryService.addNewInventory(inventory,current_user)
 
     @inventoryRouter.get("/inventory",status_code=200)
-    def getAllInventories(current_user=Depends(userService.getCurrentUser)):
-        return inventoryService.getAllInventories(current_user)
+    async def getAllInventories(current_user=Depends(userService.getCurrentUser)):
+        return await inventoryService.getAllInventories(current_user)
+
+    @inventoryRouter.get("/inventory/{id}",status_code=200)
+    async def getSingleInventory(id : str,current_user=Depends(userService.getCurrentUser)):
+        return await inventoryService.getSingleInventory(id,current_user)
 
     @inventoryRouter.put("/inventory/{id}")
-    def updateSingleInventory(id:str,updateInventory:Inventory):
-        return inventoryService.updateSingleInventory(id,updateInventory)
+    async def updateSingleInventory(id:str,updateInventory:Inventory):
+        return await inventoryService.updateSingleInventory(id,updateInventory)
 
     @inventoryRouter.delete("/inventory/{id}",status_code=200)
-    def deleteSingleInventory(id:str,current_user=Depends(userService.getCurrentUser)):
-        return inventoryService.deleteSingleInventory(id,current_user)
+    async def deleteSingleInventory(id:str,current_user=Depends(userService.getCurrentUser)):
+        return await inventoryService.deleteSingleInventory(id,current_user)
 
     
